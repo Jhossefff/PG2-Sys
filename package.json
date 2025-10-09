@@ -1,0 +1,10 @@
+{
+"scripts": {
+  "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+  "build": "tsc",
+  "start": "node dist/server.js",
+  "prisma:pull": "prisma db pull",
+  "prisma:gen": "prisma generate"
+}
+
+}
