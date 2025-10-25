@@ -21,7 +21,7 @@ import { usuariosRouter } from "./routes/usuarios.router";
 
 import { rolesPermisosRouter } from "./routes/roles-permisos.router";
 
-
+import { authRouter } from "./routes/auth.router";
 
 
 export const app = express();
@@ -65,3 +65,4 @@ app.use("/api/roles-permisos", rolesPermisosRouter);
 
 
 
+app.use("/api/auth", authRouter);
