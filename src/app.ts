@@ -7,6 +7,7 @@ import { estadosPagoRouter } from "./routes/estados-pago.router";
 import { formasPagoRouter } from "./routes/formas-pago.router";
 import { empresasRouter } from "./routes/empresas.router";
 import { clientesRouter } from "./routes/clientes.router";
+import { clientesCredencialesRouter } from "./routes/clientesCredenciales.router";
 import { permisosRouter } from "./routes/permisos.router";
 import { rolesRouter } from "./routes/roles.router";
 
@@ -17,7 +18,7 @@ import { facturasRouter } from "./routes/facturas.router";
 import { ingresosRouter } from "./routes/ingresos.router";
 import { transaccionesRouter } from "./routes/transacciones.router";
 import { usuariosRouter } from "./routes/usuarios.router";
-import { usuariosClientesRouter } from "./routes/usuarios-clientes.router";
+
 import { rolesPermisosRouter } from "./routes/roles-permisos.router";
 
 
@@ -42,6 +43,10 @@ app.use("/api/estados-pago", estadosPagoRouter);
 app.use("/api/formas-pago", formasPagoRouter);
 app.use("/api/empresas", empresasRouter);
 app.use("/api/clientes", clientesRouter);
+app.use("/api/clientes-credenciales", clientesCredencialesRouter);
+
+
+
 app.use("/api/permisos", permisosRouter);
 app.use("/api/roles", rolesRouter);
 
@@ -55,7 +60,7 @@ app.use("/api/facturas", facturasRouter);
 app.use("/api/ingresos", ingresosRouter);
 app.use("/api/transacciones", transaccionesRouter);
 app.use("/api/usuarios", usuariosRouter);
-app.use("/api/usuarios-clientes", usuariosClientesRouter);
+
 app.use("/api/roles-permisos", rolesPermisosRouter);
 
 
