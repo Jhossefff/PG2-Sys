@@ -41,7 +41,8 @@ usuariosRouter.get("/:id", async (req, res) => {
   if (!Number.isInteger(id)) return res.status(400).json({ error: "id inválido" });
 
   const rows = await prisma.$queryRawUnsafe<any[]>(
-    `SELECT ${pickUsuarioSafe} FROM dbo.usuarios WHERE idusuario = @p1`,
+    // 👇 aquí agregamos el alias u
+    `SELECT ${pickUsuarioSafe} FROM dbo.usuarios u WHERE u.idusuario = @p1`,
     id
   );
   if (!rows.length) return res.status(404).json({ error: "no encontrado" });
@@ -89,7 +90,8 @@ usuariosRouter.post("/", async (req, res) => {
 
     const id = out[0].idusuario;
     const row = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT ${pickUsuarioSafe} FROM dbo.usuarios WHERE idusuario=@p1`,
+      // 👇 aquí también usamos alias u
+      `SELECT ${pickUsuarioSafe} FROM dbo.usuarios u WHERE u.idusuario = @p1`,
       id
     );
     res.status(201).json(row[0]);
@@ -172,7 +174,8 @@ usuariosRouter.put("/:id", async (req, res) => {
     if (n === 0) return res.status(404).json({ error: "no encontrado" });
 
     const row = await prisma.$queryRawUnsafe<any[]>(
-      `SELECT ${pickUsuarioSafe} FROM dbo.usuarios WHERE idusuario=@p1`,
+      // 👇 y aquí también alias u
+      `SELECT ${pickUsuarioSafe} FROM dbo.usuarios u WHERE u.idusuario = @p1`,
       id
     );
     res.json(row[0]);

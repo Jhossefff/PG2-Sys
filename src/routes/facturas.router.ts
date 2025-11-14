@@ -78,8 +78,6 @@ facturasRouter.get("/:id", async (req, res) => {
  *  POST /api/facturas
  *  Requeridos: idusuario, idforma_pago, idestado_pago
  *  Uno de: (A) idreservacion  ó  (B) monto_subtotal
- *  - Las columnas de montos son NOT NULL -> se inserta subtotal y iva/total=0
- *  - El trigger trg_facturas_calc_montos recalcula IVA y TOTAL
  * ===================================================== */
 facturasRouter.post("/", async (req, res) => {
   const b = req.body as {
@@ -145,9 +143,7 @@ facturasRouter.post("/", async (req, res) => {
       subtotalUsar = Number(rowRes[0].monto_total);
     }
 
-    // INSERT con OUTPUT…INTO (tabla con trigger) y montos NOT NULL (iva/total en 0)
-    const rows = await prisma.$queryRawUnsafe<{ idfactura: number }[]>(
-      `
+    const rows = await prisma.$queryRawUnsafe<{ idfactura: number }[]>(`
       DECLARE @ids TABLE (idfactura INT);
 
       INSERT INTO dbo.facturas
@@ -166,14 +162,14 @@ facturasRouter.post("/", async (req, res) => {
       idcliente,
       idforma_pago,
       idestado_pago,
-      subtotalUsar,          // <- nunca NULL
+      subtotalUsar,
       observaciones,
       fechaISO
     );
 
     const id = rows[0].idfactura;
 
-    const row = await prisma.$queryRaw<any[]>`
+    const facturaRows = await prisma.$queryRaw<any[]>`
       SELECT f.idfactura, f.idusuario, f.idreservacion, f.idcliente,
              f.idforma_pago, f.idestado_pago,
              f.monto_subtotal, f.monto_iva, f.monto_total,
@@ -187,7 +183,45 @@ facturasRouter.post("/", async (req, res) => {
       JOIN dbo.usuarios     u  ON u.idusuario     = f.idusuario
       LEFT JOIN dbo.clientes c ON c.idcliente     = f.idcliente
       WHERE f.idfactura = ${id}`;
-    return res.status(201).json(row[0]);
+
+    if (!facturaRows.length) {
+      return res.status(404).json({ error: "no encontrado" });
+    }
+
+    const factura = facturaRows[0];
+
+    // --- NUEVO: si la factura está cancelada y tiene reservación,
+    //            actualizar reservación a 'cancelado' y lugar a 'Libre'
+    if (
+      factura.idreservacion &&
+      typeof factura.estado_pago === "string" &&
+      factura.estado_pago.toLowerCase().startsWith("cancel")
+    ) {
+      // 1) reservación -> cancelado
+      await prisma.$executeRawUnsafe(
+        `UPDATE dbo.reservaciones SET estado_reservacion = 'cancelado' WHERE idreservacion = @p1`,
+        factura.idreservacion
+      );
+
+      // 2) obtener idestado de 'Libre'
+      const libreRows = await prisma.$queryRaw<{ idestado: number }[]>`
+        SELECT TOP (1) idestado FROM dbo.estados_lugares WHERE estado = 'Libre'`;
+      if (libreRows.length) {
+        const idEstadoLibre = libreRows[0].idestado;
+
+        // 3) lugar asociado -> Libre
+        await prisma.$executeRaw`
+          UPDATE dbo.lugares_estacionamiento
+          SET idestado = ${idEstadoLibre}
+          WHERE idlugar = (
+            SELECT idlugar
+            FROM dbo.reservaciones
+            WHERE idreservacion = ${factura.idreservacion}
+          )`;
+      }
+    }
+
+    return res.status(201).json(factura);
   } catch (e: any) {
     return res.status(500).json({ error: e.message });
   }
@@ -195,8 +229,6 @@ facturasRouter.post("/", async (req, res) => {
 
 /* =====================================================
  *  PUT /api/facturas/:id  (parcial)
- *  Nota: monto_subtotal es NOT NULL → si se envía debe ser numérico, no NULL.
- *  Cambios en idreservacion o monto_subtotal harán que el trigger recalcule IVA/TOTAL.
  * ===================================================== */
 facturasRouter.put("/:id", async (req, res) => {
   const id = Number(req.params.id);
@@ -244,7 +276,7 @@ facturasRouter.put("/:id", async (req, res) => {
       has(b, "idforma_pago") ? 1 : 0, has(b, "idforma_pago") ? Number(b.idforma_pago) : null,
       // idestado_pago
       has(b, "idestado_pago") ? 1 : 0, has(b, "idestado_pago") ? Number(b.idestado_pago) : null,
-      // monto_subtotal (flag 1 sólo si viene y NO es null; la columna es NOT NULL)
+      // monto_subtotal
       (has(b, "monto_subtotal") && b.monto_subtotal !== null) ? 1 : 0,
       (has(b, "monto_subtotal") && b.monto_subtotal !== null) ? Number(b.monto_subtotal) : null,
       // observaciones
@@ -255,7 +287,7 @@ facturasRouter.put("/:id", async (req, res) => {
 
     if (n === 0) return res.status(404).json({ error: "no encontrado" });
 
-    const row = await prisma.$queryRaw<any[]>`
+    const facturaRows = await prisma.$queryRaw<any[]>`
       SELECT f.idfactura, f.idusuario, f.idreservacion, f.idcliente,
              f.idforma_pago, f.idestado_pago,
              f.monto_subtotal, f.monto_iva, f.monto_total,
@@ -269,7 +301,45 @@ facturasRouter.put("/:id", async (req, res) => {
       JOIN dbo.usuarios     u  ON u.idusuario     = f.idusuario
       LEFT JOIN dbo.clientes c ON c.idcliente     = f.idcliente
       WHERE f.idfactura = ${id}`;
-    res.json(row[0]);
+
+    if (!facturaRows.length) {
+      return res.status(404).json({ error: "no encontrado" });
+    }
+
+    const factura = facturaRows[0];
+
+    // --- NUEVO: si la factura está cancelada y tiene reservación,
+    //            actualizar reservación a 'cancelado' y lugar a 'Libre'
+    if (
+      factura.idreservacion &&
+      typeof factura.estado_pago === "string" &&
+      factura.estado_pago.toLowerCase().startsWith("cancel")
+    ) {
+      // 1) reservación -> cancelado
+      await prisma.$executeRawUnsafe(
+        `UPDATE dbo.reservaciones SET estado_reservacion = 'cancelado' WHERE idreservacion = @p1`,
+        factura.idreservacion
+      );
+
+      // 2) obtener idestado de 'Libre'
+      const libreRows = await prisma.$queryRaw<{ idestado: number }[]>`
+        SELECT TOP (1) idestado FROM dbo.estados_lugares WHERE estado = 'Libre'`;
+      if (libreRows.length) {
+        const idEstadoLibre = libreRows[0].idestado;
+
+        // 3) lugar asociado -> Libre
+        await prisma.$executeRaw`
+          UPDATE dbo.lugares_estacionamiento
+          SET idestado = ${idEstadoLibre}
+          WHERE idlugar = (
+            SELECT idlugar
+            FROM dbo.reservaciones
+            WHERE idreservacion = ${factura.idreservacion}
+          )`;
+      }
+    }
+
+    res.json(factura);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
