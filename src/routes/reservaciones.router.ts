@@ -156,7 +156,35 @@ reservacionesRouter.post("/", async (req, res) => {
       JOIN dbo.lugares_estacionamiento l ON l.idlugar = r.idlugar
       JOIN dbo.tarifas t ON t.idtarifa = r.idtarifa
       WHERE r.idreservacion = ${id}`;
-    res.status(201).json(row[0]);
+
+    if (!row.length) {
+      return res.status(404).json({ error: "no encontrado" });
+    }
+
+    const reservacion = row[0];
+
+    // ==== NUEVO: marcar lugar como Ocupado al crear la reservación (si no está cancelada) ====
+    if (
+      reservacion.idlugar &&
+      typeof reservacion.estado_reservacion === "string" &&
+      reservacion.estado_reservacion.toLowerCase() !== "cancelado"
+    ) {
+      const ocupados = await prisma.$queryRaw<{ idestado: number }[]>`
+        SELECT TOP (1) idestado
+        FROM dbo.estados_lugares
+        WHERE LOWER(estado) = 'ocupado'`;
+
+      if (ocupados.length) {
+        const idEstadoOcupado = ocupados[0].idestado;
+        await prisma.$executeRaw`
+          UPDATE dbo.lugares_estacionamiento
+          SET idestado = ${idEstadoOcupado}
+          WHERE idlugar = ${reservacion.idlugar}`;
+      }
+    }
+    // ==== FIN NUEVO ====
+
+    res.status(201).json(reservacion);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
@@ -283,7 +311,35 @@ reservacionesRouter.put("/:id", async (req, res) => {
       JOIN dbo.lugares_estacionamiento l ON l.idlugar = r.idlugar
       JOIN dbo.tarifas t ON t.idtarifa = r.idtarifa
       WHERE r.idreservacion = ${id}`;
-    res.json(row[0]);
+
+    if (!row.length) {
+      return res.status(404).json({ error: "no encontrado" });
+    }
+
+    const reservacion = row[0];
+
+    // ==== NUEVO: marcar lugar como Ocupado al actualizar reservación (si no está cancelada) ====
+    if (
+      reservacion.idlugar &&
+      typeof reservacion.estado_reservacion === "string" &&
+      reservacion.estado_reservacion.toLowerCase() !== "cancelado"
+    ) {
+      const ocupados = await prisma.$queryRaw<{ idestado: number }[]>`
+        SELECT TOP (1) idestado
+        FROM dbo.estados_lugares
+        WHERE LOWER(estado) = 'ocupado'`;
+
+      if (ocupados.length) {
+        const idEstadoOcupado = ocupados[0].idestado;
+        await prisma.$executeRaw`
+          UPDATE dbo.lugares_estacionamiento
+          SET idestado = ${idEstadoOcupado}
+          WHERE idlugar = ${reservacion.idlugar}`;
+      }
+    }
+    // ==== FIN NUEVO ====
+
+    res.json(reservacion);
   } catch (e: any) {
     res.status(500).json({ error: e.message });
   }
